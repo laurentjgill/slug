@@ -10,19 +10,19 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
  This is an analysis of the data for freeze vs cold
  
- Load libraries
+# Load libraries
 ```{r}
 library(tidyverse)
 library(officer)
 library(rvg)
 ```
 
-Read in dataset
+# Read in dataset
 ```{r}
-cold <- read_csv("coldvsfreeze.csv")
-view(cold)
+cold <- read_csv("../data/coldvsfreeze.csv")
 ```
 
+# Plotting
 How to display survival and freezing ....
 Trying a stacked bar chart showing time spent frozen and time spent at cold exposure
 First create data that will suit this type of plot
@@ -41,6 +41,7 @@ stacked_bar <- cold %>%
 stacked_bar
 ```
 
+#Stats
 Testing this with logistic regression
 ```{r}
 cold.glm <- glm(survival ~ weight + cold_exposure_length + frozen, data = cold, family="binomial")
@@ -48,6 +49,7 @@ summary(cold.glm)
 anova(cold.glm,test="Chisq")
 ```
 
+# More Plotting
 Now creating a stacked bar plot
 ```{r}
 level_order <- c("time_spent_frozen", "only_cold")
@@ -62,37 +64,25 @@ cold_bar
 
 Exporting it to power point to make it look pretty
 https://rpubs.com/techanswers88/VectorGraphicsChartsUsingGGPLOT
-```{r}
+```{r, eval = FALSE}
 #first export to vector object
-myplot <-  dml(ggobj = cold_bar
+#myplot <-  dml(ggobj = cold_bar
               ,bg = "white"
               ,pointsize = 12
               ,editable = TRUE)
-doc <- read_pptx()
+#doc <- read_pptx()
 
 
-doc <- add_slide(doc, "Title and Content", "Office Theme")
-doc <- ph_with(doc, myplot, location = ph_location_fullsize())
+#doc <- add_slide(doc, "Title and Content", "Office Theme")
+#doc <- ph_with(doc, myplot, location = ph_location_fullsize())
 
 # If you want to create multiple charts then create your second chart and call it myplot2 
 
 #doc <- add_slide(doc, "Title and Content", "Office Theme")
 #doc <- ph_with(doc, myplot, location = ph_location_fullsize())
 
-fileout <- "mygraph.pptx"
-print(doc, target = fileout)
+#fileout <- "mygraph.pptx"
+#print(doc, target = fileout)
 
-```
-
-
-Trying to make a mosaic plot
-```{r}
-cold %>%
-  group_by(frozen, survival) %>%
-  summarise(number = length(weight))
-
-%>%
-  ggplot(aes(x = frozen, y = number, fill = survival )) +
-  geom_col()
 ```
 

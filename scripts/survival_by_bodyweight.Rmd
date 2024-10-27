@@ -7,7 +7,7 @@ output: html_document
 
 Checking out slug survival
 
-Load libraries
+# Load libraries
 ```{r}
 library(tidyverse)
 library(cowplot)
@@ -16,16 +16,18 @@ library(MASS)
 library(scales)
 library(multcompView)
 library(emmeans)
+library(sciplot)
 ```
 
-Read in dataset
+# Read in dataset
 ```{r}
-survival <- read_csv("survival_after_acclimation.csv")
-survival_original <- read_csv("survival_original.csv")
-slug_weights <- read.csv("NMR_data//FINAL_NMR_BAYESIL_processed//slug_weights.csv")
+survival_original <- read_csv("../data/survival_original.csv")
+slug_weights <- read.csv("../data/slug_weights.csv")
 
 ```
-Overall body weight
+
+
+# Body weight
 
 ```{r}
 body_weight <- survival_original %>%
@@ -79,6 +81,7 @@ p2
 
 ```
 
+# Survival
 Look at survival proportions for all slugs
 Standard Error of the proportion (where p is the sample proportion) = √p̂(1-p̂) / n
 ```{r}
@@ -128,7 +131,7 @@ p1
 
 ```
 
-
+# Super cooling Point
 Now looking at the average SCP for the slugs
 ```{r}
 scp_by_treatment <- survival_original %>%
@@ -145,26 +148,10 @@ summary(aov(scp.glm))
 scp.anova <- aov(averageSCP~weight+acclimation_day_length*acclimation_temp,data=survival_stats)
 
 summary(scp.anova)
+```
 
-library(sciplot)
-
-lineplot.CI(acclimation_temp,averageSCP,acclimation_day_length,data=survival_stats, 
-            lwd = 5,
-            cex = 2,
-            col = c("dark blue", "light blue"),
-            leg.lab = c("Short Day", "Long Day"),
-            xlab = "Acclimation Temperature (°C)",
-            ylab = "Supercooling Point (°C)",
-            las = 1,
-            ylim = c(-6.5, -4.5))
-
-?lineplot.CI
-
-weight.anova <- aov(weight~acclimation_day_length*acclimation_temp,data=survival_stats)
-
-summary(weight.anova)
-
-
+Making a plot of scp by treatment
+```{r}
 p2 <- scp_by_treatment %>%
   ggplot(aes(x = factor(treatment, level = level_order), y = mean_scp)) +
   geom_point(size = 3)+
@@ -174,14 +161,18 @@ p2 <- scp_by_treatment %>%
 
 p2
 
+```
+
+Now making a line plot
+```{r}
 #relationship between weight and average scp?
 plot(survival_original$weight, survival_original$averageSCP)
 
 #lineplot
-library(sciplot)
+
 
 lineplot.CI(acclimation_temp,averageSCP,acclimation_day_length,
-            data=survival,
+            data=survival_original,
             lwd = 2,
             cex = 1,
             col = c("light blue", "dark blue"),
@@ -193,8 +184,6 @@ lineplot.CI(acclimation_temp,averageSCP,acclimation_day_length,
             cex.leg = 1.1,
             x.leg = 1.8,
             cex.axis = 1.2) 
-#paste this into command line to be able to ajust the plot in quartz
-
 ```
 
 Now stacking these graphs upon eachother
@@ -206,6 +195,8 @@ plot_grid(
 )
 ```
 
+
+# Body Water Content
 Looking at wet weight vs dry weight
 ```{r}
 slug_weights_deets <- slug_weights %>%
