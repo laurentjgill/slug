@@ -1,0 +1,277 @@
+---
+title: "slug_survival"
+author: "Lauren Gill"
+date: "24/07/2023"
+output: html_document
+---
+
+Checking out slug survival
+
+Load libraries
+```{r}
+library(tidyverse)
+library(cowplot)
+library(multcomp)
+library(MASS)
+library(scales)
+library(multcompView)
+library(emmeans)
+```
+
+Read in dataset
+```{r}
+survival <- read_csv("survival_after_acclimation.csv")
+survival_original <- read_csv("survival_original.csv")
+slug_weights <- read.csv("NMR_data//FINAL_NMR_BAYESIL_processed//slug_weights.csv")
+
+```
+Overall body weight
+
+```{r}
+body_weight <- survival_original %>%
+  filter(minutes_frozen == 0) %>%
+  summarize(mean_weight = mean(weight),
+            sd_weight = sd(weight),
+            count = n(),
+            se=sd_weight/sqrt(count),
+            max = max(weight),
+            min = min(weight)) %>%
+  drop_na()
+```
+
+Compare bodyweight by survival in each category
+
+```{r}
+survival_body_weight <- survival_original %>%
+  filter(minutes_frozen == 0) %>%
+  group_by(treatment, survival) %>%
+  summarize(mean_weight = mean(weight),
+            sd_weight = sd(weight),
+            count = n(),
+            se=sd_weight/sqrt(count), 
+            upper_limit=mean_weight+se, 
+            lower_limit=mean_weight-se 
+  ) %>%
+  drop_na()
+
+survival_body_weight$survival <- as.factor(survival_body_weight$survival)
+
+survival_body_weight %>%
+  ggplot(aes(x = survival, y = mean_weight)) +
+  geom_point(size = 3)+
+  geom_errorbar(aes(ymin=lower_limit, ymax=upper_limit))+
+  facet_wrap(vars(treatment)) +
+  theme_bw()
+
+str(survival_body_weight$survival)
+
+p2 <- survival_original %>%
+  ggplot(aes(x = weight, y = averageSCP)) +
+  geom_point() +
+  geom_smooth(method = 'lm') +
+  theme_classic() +
+  labs(x = "Weight (g)",
+       y = "Supercooling Point (°C)") +
+    scale_x_continuous(limits = c(0.1, 1.1), breaks = pretty_breaks())
+
+p2
+
+
+```
+
+Look at survival proportions for all slugs
+Standard Error of the proportion (where p is the sample proportion) = √p̂(1-p̂) / n
+```{r}
+
+survival_by_treatment <- survival_original %>%
+  filter(minutes_frozen == 0) %>%
+  group_by(treatment) %>%
+  drop_na(survival) %>%
+  summarize(prop_surv = mean(survival, na.rm = TRUE),
+            count = n(),
+            se=sqrt((prop_surv*(1-prop_surv))/count), 
+            upper_limit=prop_surv+se, 
+            lower_limit=prop_surv-se) %>%
+  arrange((prop_surv))
+
+
+```
+Now running a chisq test on the data
+```{r}
+
+survival_stats <- survival_original %>%
+  filter(minutes_frozen == 0) %>%
+  mutate(acclimation_day_length = as_factor(acclimation_day_length),
+         acclimation_temp = as_factor(acclimation_temp))
+
+slug.survival.glm <- glm(survival~ acclimation_day_length*acclimation_temp + weight,family="binomial",data=survival_stats)
+anova(slug.survival.glm,test="Chisq")
+
+
+```
+
+
+Running a Graph
+```{r}
+
+level_order <- c("LD20", "LD15", "SD20", "SD15")
+p1 <- survival_by_treatment %>%
+  ggplot(aes(x = factor(treatment, level = level_order), y = prop_surv)) +
+  geom_point(size = 3)+
+  geom_errorbar(aes(ymin=lower_limit, ymax=upper_limit), width = 0.5)+
+  xlab("Treatment")+
+  ylab("Survival Proportion")+
+  scale_y_continuous(limits = c(0, 0.6), breaks = pretty_breaks())+
+  theme_classic(base_size = 18) 
+
+p1
+
+```
+
+
+Now looking at the average SCP for the slugs
+```{r}
+scp_by_treatment <- survival_original %>%
+  group_by(treatment) %>%
+  summarize(mean_scp = mean(averageSCP, na.rm = TRUE),
+            count = n(),
+            sd_scp=sd(averageSCP, na.rm = TRUE), 
+            se=sd_scp/sqrt(count), 
+            upper_limit=mean_scp+se, 
+            lower_limit=mean_scp-se)
+
+scp.glm <- glm(averageSCP~weight+acclimation_day_length*acclimation_temp,data=survival_stats)
+summary(aov(scp.glm))
+scp.anova <- aov(averageSCP~weight+acclimation_day_length*acclimation_temp,data=survival_stats)
+
+summary(scp.anova)
+
+library(sciplot)
+
+lineplot.CI(acclimation_temp,averageSCP,acclimation_day_length,data=survival_stats, 
+            lwd = 5,
+            cex = 2,
+            col = c("dark blue", "light blue"),
+            leg.lab = c("Short Day", "Long Day"),
+            xlab = "Acclimation Temperature (°C)",
+            ylab = "Supercooling Point (°C)",
+            las = 1,
+            ylim = c(-6.5, -4.5))
+
+?lineplot.CI
+
+weight.anova <- aov(weight~acclimation_day_length*acclimation_temp,data=survival_stats)
+
+summary(weight.anova)
+
+
+p2 <- scp_by_treatment %>%
+  ggplot(aes(x = factor(treatment, level = level_order), y = mean_scp)) +
+  geom_point(size = 3)+
+  geom_errorbar(aes(ymin=lower_limit, ymax=upper_limit), width = 0.5)+
+  xlab("Treatment")+
+  theme_bw()
+
+p2
+
+#relationship between weight and average scp?
+plot(survival_original$weight, survival_original$averageSCP)
+
+#lineplot
+library(sciplot)
+
+lineplot.CI(acclimation_temp,averageSCP,acclimation_day_length,
+            data=survival,
+            lwd = 2,
+            cex = 1,
+            col = c("light blue", "dark blue"),
+            leg.lab = c("Short Day", "Long Day"),
+            xlab = "Acclimation Temperature (°C)",
+            ylab = "Supercooling Point (°C)",
+            las = 1,
+            ylim = c(-8, -2),
+            cex.leg = 1.1,
+            x.leg = 1.8,
+            cex.axis = 1.2) 
+#paste this into command line to be able to ajust the plot in quartz
+
+```
+
+Now stacking these graphs upon eachother
+```{r}
+plot_grid(
+  p2, p1,
+  labels = "AUTO", ncol = 1,
+  rel_heights = c(0.4, 0.7)
+)
+```
+
+Looking at wet weight vs dry weight
+```{r}
+slug_weights_deets <- slug_weights %>%
+  #photoperiod
+   mutate(
+    photoperiod = case_when(
+      str_sub(slug_number, 1, 1) == 'A' ~ 'LD',
+      str_sub(slug_number, 1, 1) == 'B' ~ 'SD',
+      str_sub(slug_number, 1, 1) == 'C' ~ 'LD',
+      str_sub(slug_number, 1, 1) == 'D' ~ 'SD'
+    )
+  ) %>%
+  #temperature
+     mutate(
+    temperature = case_when(
+      str_sub(slug_number, 1, 1) == 'A' ~ '20',
+      str_sub(slug_number, 1, 1) == 'B' ~ '20',
+      str_sub(slug_number, 1, 1) == 'C' ~ '15',
+      str_sub(slug_number, 1, 1) == 'D' ~ '15'
+    )
+  ) %>%
+  #difference between wet and dry
+  mutate(dryoverwet = dry_weight_g/wet_weight_g) %>%
+  #wet percentage
+  mutate(wetpercent = (wet_weight_g -dry_weight_g)/wet_weight_g)
+
+slug_weights_grouped <- slug_weights_deets %>%
+  group_by(photoperiod, temperature) %>%
+  summarise(N    = length(wetpercent),
+                     mean = mean(wetpercent, na.rm = TRUE),
+                     sd   = sd(wetpercent, na.rm = TRUE),
+                     std   = sd / sqrt(N))
+
+slug_weights_grouped_temp <- slug_weights_deets %>%
+  group_by(temperature) %>%
+  summarise(N    = length(wetpercent),
+                     mean = mean(wetpercent, na.rm = TRUE),
+                     sd   = sd(wetpercent, na.rm = TRUE),
+                     std   = sd / sqrt(N))
+
+#graph
+weight_graph <- slug_weights_grouped%>%
+  ggplot(aes(x = temperature, y = mean, fill = photoperiod)) +
+  geom_point(size=3, 
+             position = position_dodge(width = 1),
+             aes(colour = photoperiod)) +
+  geom_errorbar(position = position_dodge(width = 1),
+                linewidth=0.4,
+                width = 0.5,
+                aes(ymin=mean-std, ymax=mean+std))+
+  #adding in jitter points
+    geom_point(data = slug_weights_deets, 
+               aes(colour = photoperiod, x= temperature, y = wetpercent),
+               position = position_dodge(width = 1), 
+               size = 1.3, alpha = .3,
+               show.legend = FALSE)+
+  labs(y = "Dry weight/Wet Weight") +
+  theme_classic()
+
+weight_graph
+
+```
+
+Stats
+```{r}
+lm_weight <- lm(wetpercent ~ photoperiod * temperature, data = slug_weights_deets)
+anova(lm_weight)
+```
+

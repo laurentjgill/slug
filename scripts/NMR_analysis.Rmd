@@ -1,0 +1,341 @@
+---
+title: "NMR analysis"
+author: "Lauren Gill"
+date: "10/01/2024"
+output: pdf_document
+---
+
+Load in libraries
+
+```{r}
+library(tidyverse)
+library(mdatools)
+library(ggpubr)
+library(car)
+library(emmeans)
+library(cowplot)
+library(multcompView)
+library(agricolae)
+library(openxlsx)
+```
+
+Load in data The data is the metabolites already normalized by wetweight
+
+```{r}
+concentrations <- read_csv("../data/concentrations_names.csv")
+slug_weights <- read_csv("../data/slug_weights.csv")
+```
+
+## Transform data
+
+First making the data into um intstead of uM
+The slugs were placed in 500uL (500/10^6 L) of acetonitrile so concentrations are relative to this
+
+Concentrations in the original table are in uM
+uM = umol/L 
+umol = uM * L
+```{r}
+## renaming the sample column in slug_weights
+slug_weights <- slug_weights %>% 
+  rename(sample = slug_number)
+
+nmr <- right_join(slug_weights, concentrations, by = "sample")%>%
+  #converting to umoles (see notes above)
+  mutate(across(`1-Methylhistidine`:`Dimethyl sulfone`,
+                ~ .*(500/(10^6)))) %>%
+  #dividing each conc in each row by the dry weight (in g)
+  mutate(across(`1-Methylhistidine`:`Dimethyl sulfone`,
+                ~ ./wet_weight_g)) %>%
+  #removing extrenuous colomns (for metaboanalyst) 
+  dplyr::select(-c(wet_weight_g, dry_weight_g))
+
+#write_csv(nmr_wet, "new_wet_conc_moles.csv")
+```
+Final units: umol metabolite/g ww
+
+```{r}
+nmr_transformed <- nmr %>%
+  #sqrt tranforming the data
+  mutate(across(!c(sample, group), sqrt)) %>%
+  #deleting the first two columns because "prep.autoscale" doesnt use them
+  dplyr::select(!c(sample, group))
+
+#Now autoscaling the data
+nmr_scaled <- prep.autoscale(nmr_transformed, center = TRUE, scale = TRUE)
+
+#Adding back in the first two columns
+first_columns <- nmr %>%
+  dplyr::select(c(sample, group))
+nmr_normal <- cbind(first_columns, nmr_scaled)
+```
+
+Check out this transformed data
+
+```{r}
+
+#Original NMR data (big variances)
+nmr_original <- nmr %>%
+  dplyr::select(!c(sample, group))
+boxplot(nmr_original)
+
+#the transformed data, looks a lot better!
+boxplot(nmr_scaled)
+```
+
+## ANOVA
+
+Trying a two way anova (<https://haowang47.github.io/files/2023-01-31-2wayANOVA.html>) 
+
+Lets make a function
+Input = dataname, name of metabolite
+```{r}
+metaboanova <- function(data, metabolite){
+#first making a data table with just metabo concentrations
+
+glut <- data %>%
+  dplyr::select(sample, group, {{metabolite}}) %>%
+  rename(conc = {{metabolite}}) %>%
+  #seperating SD20 into SD and 20 
+  tidyr::separate(group,
+                  into = c("day_length", "temp"),
+                  sep = "(?<=[A-Za-z])(?=[0-9])")
+
+glut_anova <- lm(conc ~ day_length*temp, data = glut, 
+                   contrasts = list(temp="contr.sum", day_length="contr.sum"))
+
+
+aov(glut_anova)
+}
+```
+
+
+```{r}
+metaboletters <- function(data, metabolite){
+#first making a data table with just metabo concentrations
+
+glut <- data %>%
+  dplyr::select(sample, group, {{metabolite}}) %>%
+  rename(conc = {{metabolite}}) %>%
+  #seperating SD20 into SD and 20 
+  tidyr::separate(group,
+           into = c("day_length", "temp"), 
+           sep = "(?<=[A-Za-z])(?=[0-9])")
+
+glut_anova <- lm(conc ~ day_length*temp, data = glut, 
+                   contrasts = list(temp="contr.sum", day_length="contr.sum"))
+
+
+multcompLetters4(glut_anova, TukeyHSD(aov(glut_anova)), reversed = TRUE)
+}
+
+```
+
+Getting letters to put on the plot
+```{r}
+th_letter <- metaboletters(nmr_normal, `L-Threonine`)
+th_letter_1 <- th_letter$`day_length:temp`
+th_letter_1
+
+metaboletters(nmr_normal, `L-Glutamine`)
+metaboletters(nmr_normal, `Formate`)
+```
+
+
+
+```{r}
+th <- metaboanova(nmr_normal, `L-Threonine`)
+summary(th)
+th_tukey <- TukeyHSD(th)
+letters <- multcompLetters4(th, TukeyHSD(aov(th)), reversed = TRUE)
+th_tukey
+
+glut <- metaboanova(nmr_normal, `L-Glutamine`)
+summary(glut)
+form <- metaboanova(nmr_normal, `Formate`)
+summary(form)
+```
+
+Trying to add p values
+```{r}
+
+nmr_summarized <-  nmr %>%
+  dplyr::select(sample, group, Formate, `L-Threonine`, `L-Glutamine`)%>%
+  pivot_longer(!c(sample, group), names_to = "metabolite", values_to = "conc") %>%
+  group_by(group) %>% 
+  summarize(max_conc=max(conc))
+
+hsd <- HSD.test(th, "day_length", group=T)
+
+```
+
+
+
+
+### Mean Comparisons
+
+Checking simple effects
+#### Glutamine
+```{r}
+#first making a data table with just metabo concentrations
+glut <- nmr_normal %>%
+  dplyr::select(sample, group, `L-Glutamine`) %>%
+  rename(conc = `L-Glutamine`) %>%
+  #seperating SD20 into SD and 20 
+  tidyr::separate(group,
+           into = c("day_length", "temp"), 
+           sep = "(?<=[A-Za-z])(?=[0-9])")
+
+glut_anova <- lm(conc ~ day_length*temp, data = glut, 
+                   contrasts = list(temp="contr.sum",
+                                    day_length="contr.sum"))
+
+#by day length
+tempbydaylength <- emmeans(glut_anova, ~temp|day_length)
+tempbydaylength
+
+pairs(tempbydaylength) #signficant!
+
+#by temp
+daylengthbytemp <- emmeans(glut_anova, ~day_length|temp)
+daylengthbytemp
+
+pairs(daylengthbytemp) #nothing significant!
+```
+
+
+### Model fit
+
+Does the Model fit the data?? QQplot - looks good
+
+```{r}
+ggplot(glut_anova, aes(sample = rstandard(glut_anova))) + geom_qq() + stat_qq_line()+ylab("Studentized Residuals Qunatiles") + xlab("Normal Qunatiles")
+```
+
+### Plotting
+
+```{r}
+glut_graph <- ggplot(glut, aes(x = temp, y = conc)) +
+  geom_boxplot() +
+  geom_jitter() +
+  facet_wrap(~day_length) +
+  theme_cowplot() +
+  stat_compare_means(label =  "p.signif", label.x = 1.5)
+
+```
+
+## Making a Metabo Graphing Function
+
+now make a function for graphing by metabolite
+
+```{r}
+
+metabograph <- function(data, metabolite, x, wrap){
+  
+  data %>%
+  dplyr::select(sample, group, {{metabolite}}) %>%
+  rename(conc = {{metabolite}}) %>%
+  #seperating SD20 into SD and 20 
+  separate(group,
+           into = c("day_length", "temp"), 
+           sep = "(?<=[A-Za-z])(?=[0-9])") %>%
+    ggplot(aes(x = {{x}}, y =conc)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.28) +
+  facet_wrap(enquo(wrap)) +
+    theme_cowplot() +
+    labs(y = expression(paste("Normalized Metabolite Concentration (µM m",g^-1,"dry mass)")))+
+    stat_compare_means(label =  "p.signif", label.x = 1.5)
+
+}
+
+metabograph(nmr_normal, `L-Glutamine`, temp, day_length)
+#ggsave("glutamine.pdf")
+```
+
+Lets try this function on threonine
+
+```{r}
+p1 <- metabograph(nmr_normal, `L-Threonine`, day_length, temp)
+#ggsave("threonine.pdf")
+
+```
+
+Lets try this function on formate
+
+```{r}
+metabograph(nmr_normal, Formate, temp, day_length)
+#ggsave("fomate.pdf")
+```
+
+Now making a new graph that has a multiplot set up
+This time I am using the un-transformed data
+
+```{r fig.height=5.5, fig.width=5}
+
+ nmr %>%
+  dplyr::select(sample, group, Formate, `L-Threonine`, `L-Glutamine`)%>%
+  pivot_longer(!c(sample, group), names_to = "metabolite", values_to = "conc") %>%
+    ggplot(aes(x = group, y =conc, fill = group)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.3) +
+  geom_jitter(width = 0.25, alpha = 0.3) +
+  scale_x_discrete(limits = c("LD20", "LD15", "SD20", "SD15"))+
+  
+  facet_wrap(vars(metabolite), nrow = 3, scales = "free", strip.position = "top") +
+    theme_cowplot() +
+  #get rid of legend
+theme(legend.position="none")+
+    labs(y = expression(paste("Metabolite Concentration (µmol ",g^-1,"wet mass)")),
+         x = "Group")
+
+#getting n values
+nmr %>%
+  group_by(group) %>%
+  summarize(count = n())
+
+#ggsave("all_metabolites_plot_updatedoct2025.pdf")
+```
+
+
+Table for results
+```{r}
+
+#read in file with metabolite groups
+mgroup <- read_csv("../data/metabolite_groups.csv")
+mgroup_long <- mgroup %>%
+  pivot_longer(cols = everything(),
+               names_to = "category", 
+               values_to = "metabolite",
+               values_drop_na = TRUE)
+
+table_for_results <- nmr %>%
+  dplyr::select(!c(group)) %>%
+  pivot_longer(!sample, names_to = "metabolite", values_to = "concentrations") %>%
+  group_by(metabolite) %>%
+  summarise(N    = length(concentrations),
+                     mean = mean(concentrations, na.rm = TRUE),
+                     sd   = sd(concentrations, na.rm = TRUE),
+                     std   = sd / sqrt(N)) %>%
+  #rounding
+  mutate_at(vars(-metabolite), funs(round(., 2))) %>%
+  inner_join(mgroup_long,
+             by = "metabolite") %>%
+#paste together mean and std and metabolite
+  mutate(all = paste("[",mean,"±",std, "]"),
+         #get rid of white spaces
+         all = gsub(" ", "", all),
+         #paste the metabolite name again
+         all2 = paste(metabolite, all))%>%
+   #get rid of N and sd
+  dplyr::select(all2, category) %>%
+  ungroup() %>%
+mutate(row_id = row_number()) %>%
+  # Pivot wider while using 'row_id' to avoid aggregation issues
+  pivot_wider(
+    names_from = category,
+    values_from = all2,
+    id_cols = row_id) %>%
+  dplyr::select(-c(row_id))
+
+#write.xlsx(table_for_results, 'table_for_results_updated.xlsx')
+```
+

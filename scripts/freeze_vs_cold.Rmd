@@ -1,0 +1,98 @@
+---
+title: "freeze_vs_cold"
+author: "Lauren Gill"
+date: "31/07/2023"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+ This is an analysis of the data for freeze vs cold
+ 
+ Load libraries
+```{r}
+library(tidyverse)
+library(officer)
+library(rvg)
+```
+
+Read in dataset
+```{r}
+cold <- read_csv("coldvsfreeze.csv")
+view(cold)
+```
+
+How to display survival and freezing ....
+Trying a stacked bar chart showing time spent frozen and time spent at cold exposure
+First create data that will suit this type of plot
+```{r}
+cold$slug_number <- as.factor(cold$slug_number)
+cold$survival <- as.factor(cold$survival)
+cold$frozen <- as.factor(cold$frozen)
+
+stacked_bar <- cold %>%
+  dplyr::select(survival, cold_exposure_length, time_spent_frozen, slug_number) %>%
+  mutate(only_cold = cold_exposure_length - time_spent_frozen) %>%
+  pivot_longer(cols = c(time_spent_frozen, only_cold), 
+               names_to = "state", 
+               values_to = "time")
+
+stacked_bar
+```
+
+Testing this with logistic regression
+```{r}
+cold.glm <- glm(survival ~ weight + cold_exposure_length + frozen, data = cold, family="binomial")
+summary(cold.glm)
+anova(cold.glm,test="Chisq")
+```
+
+Now creating a stacked bar plot
+```{r}
+level_order <- c("time_spent_frozen", "only_cold")
+
+cold_bar <- ggplot(data = stacked_bar, aes(x = time, y = slug_number, fill = factor(state, levels = level_order))) + 
+    geom_bar(stat='identity') +
+  facet_grid(survival ~ .) +
+  theme_bw()
+
+cold_bar
+```
+
+Exporting it to power point to make it look pretty
+https://rpubs.com/techanswers88/VectorGraphicsChartsUsingGGPLOT
+```{r}
+#first export to vector object
+myplot <-  dml(ggobj = cold_bar
+              ,bg = "white"
+              ,pointsize = 12
+              ,editable = TRUE)
+doc <- read_pptx()
+
+
+doc <- add_slide(doc, "Title and Content", "Office Theme")
+doc <- ph_with(doc, myplot, location = ph_location_fullsize())
+
+# If you want to create multiple charts then create your second chart and call it myplot2 
+
+#doc <- add_slide(doc, "Title and Content", "Office Theme")
+#doc <- ph_with(doc, myplot, location = ph_location_fullsize())
+
+fileout <- "mygraph.pptx"
+print(doc, target = fileout)
+
+```
+
+
+Trying to make a mosaic plot
+```{r}
+cold %>%
+  group_by(frozen, survival) %>%
+  summarise(number = length(weight))
+
+%>%
+  ggplot(aes(x = frozen, y = number, fill = survival )) +
+  geom_col()
+```
+
