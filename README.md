@@ -1,9 +1,3 @@
----
-editor_options: 
-  markdown: 
-    wrap: sentence
----
-
 # Cold Tolerance Analysis of *A. valentianus*
 
 This repository contains the code and data for analyzing the cold tolerance of *A. valentianus*.
