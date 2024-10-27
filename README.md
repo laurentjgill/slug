@@ -42,4 +42,3 @@ The scripts/ folder contains R Markdown files and their corresponding outputs us
 To replicate the analysis, ensure you have the required R packages installed.
 The R Markdown (.Rmd) files can be rendered to generate the analysis reports, while the data files provide the necessary datasets for each script.
 
-License
