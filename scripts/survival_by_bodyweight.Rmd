@@ -8,6 +8,7 @@ output: html_document
 Checking out slug survival
 
 # Load libraries
+
 ```{r}
 library(tidyverse)
 library(cowplot)
@@ -20,12 +21,12 @@ library(sciplot)
 ```
 
 # Read in dataset
+
 ```{r}
 survival_original <- read_csv("../data/survival_original.csv")
 slug_weights <- read.csv("../data/slug_weights.csv")
 
 ```
-
 
 # Body weight
 
@@ -72,7 +73,7 @@ p2 <- survival_original %>%
   geom_point() +
   geom_smooth(method = 'lm') +
   theme_classic() +
-  labs(x = "Weight (g)",
+  labs(x = "Body Mass (g)",
        y = "Supercooling Point (°C)") +
     scale_x_continuous(limits = c(0.1, 1.1), breaks = pretty_breaks())
 
@@ -82,8 +83,9 @@ p2
 ```
 
 # Survival
-Look at survival proportions for all slugs
-Standard Error of the proportion (where p is the sample proportion) = √p̂(1-p̂) / n
+
+Look at survival proportions for all slugs Standard Error of the proportion (where p is the sample proportion) = √p̂(1-p̂) / n
+
 ```{r}
 
 survival_by_treatment <- survival_original %>%
@@ -99,7 +101,9 @@ survival_by_treatment <- survival_original %>%
 
 
 ```
+
 Now running a chisq test on the data
+
 ```{r}
 
 survival_stats <- survival_original %>%
@@ -113,8 +117,8 @@ anova(slug.survival.glm,test="Chisq")
 
 ```
 
-
 Running a Graph
+
 ```{r}
 
 level_order <- c("LD20", "LD15", "SD20", "SD15")
@@ -132,7 +136,9 @@ p1
 ```
 
 # Super cooling Point
+
 Now looking at the average SCP for the slugs
+
 ```{r}
 scp_by_treatment <- survival_original %>%
   group_by(treatment) %>%
@@ -151,6 +157,7 @@ summary(scp.anova)
 ```
 
 Making a plot of scp by treatment
+
 ```{r}
 p2 <- scp_by_treatment %>%
   ggplot(aes(x = factor(treatment, level = level_order), y = mean_scp)) +
@@ -164,6 +171,7 @@ p2
 ```
 
 Now making a line plot
+
 ```{r}
 #relationship between weight and average scp?
 plot(survival_original$weight, survival_original$averageSCP)
@@ -187,6 +195,7 @@ lineplot.CI(acclimation_temp,averageSCP,acclimation_day_length,
 ```
 
 Now stacking these graphs upon eachother
+
 ```{r}
 plot_grid(
   p2, p1,
@@ -195,9 +204,10 @@ plot_grid(
 )
 ```
 
-
 # Body Water Content
+
 Looking at wet weight vs dry weight
+
 ```{r}
 slug_weights_deets <- slug_weights %>%
   #photoperiod
@@ -261,8 +271,8 @@ weight_graph
 ```
 
 Stats
+
 ```{r}
 lm_weight <- lm(wetpercent ~ photoperiod * temperature, data = slug_weights_deets)
 anova(lm_weight)
 ```
-

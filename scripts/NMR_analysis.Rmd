@@ -35,6 +35,7 @@ Concentrations in the original table are in uM
 uM = umol/L 
 umol = uM * L
 ```{r}
+500/(10^6)
 ## renaming the sample column in slug_weights
 slug_weights <- slug_weights %>% 
   rename(sample = slug_number)
